@@ -19,7 +19,7 @@ pub enum Kind {
     #[token("?")]
     Question,
 
-    #[regex(r"'[^']*'")]
+    #[regex(r"'([^'\\]|\\['\\bnfrt]|u[a-fA-F0-9]{4})*'")]
     Literal,
 
     #[regex("//.*", logos::skip)]

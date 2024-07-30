@@ -29,5 +29,23 @@ fn main() {
 
             println!("{grammar:#?}");
         }
+        args::Command::First { path, non_terminal } => {
+            let source = std::fs::read_to_string(&path).unwrap();
+            let mut parser = parser::Parser::new(&source);
+            parser.parse();
+            let tree = parser.tree();
+
+            let grammar = GrammarBuilder::new(&source, tree).build();
+
+            if let Some(nt) = non_terminal {
+                let first = grammar.first_set(&nt);
+                println!("{first:?}");
+            } else {
+                for nt in grammar.non_terminals() {
+                    let first = grammar.first_set(&nt);
+                    println!("{nt}: {first:?}");
+                }
+            }
+        }
     }
 }

@@ -9,6 +9,14 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    Lex { path: PathBuf },
-    Parse { path: PathBuf },
+    Lex {
+        path: PathBuf,
+    },
+    Parse {
+        path: PathBuf,
+    },
+    First {
+        path: PathBuf,
+        non_terminal: Option<String>,
+    },
 }

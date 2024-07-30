@@ -1,13 +1,77 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     parser::{Child, Kind, Tree},
     token,
 };
 
-#[derive(Debug)]
 pub struct Grammar<'src> {
     rules: HashMap<&'src str, Expr<'src>>,
+}
+
+impl<'src> Grammar<'src> {
+    pub fn first_set(&'src self, name: &str) -> HashSet<&'src str> {
+        let expr = self
+            .rules
+            .get(name)
+            .expect(&format!("rule not found {name:?}"));
+        self.first_set_impl(expr)
+    }
+
+    pub fn non_terminals(&self) -> HashSet<&str> {
+        self.rules.keys().copied().collect()
+    }
+
+    pub fn first_set_impl(&'src self, expr: &'src Expr) -> HashSet<&'src str> {
+        let mut set: HashSet<&str> = HashSet::new();
+
+        match expr {
+            Expr::Literal(lit) => {
+                set.insert(lit);
+            }
+            Expr::Rule(rule) => {
+                set.extend(self.first_set(rule));
+            }
+            Expr::Sequence(exprs) => {
+                for expr in exprs {
+                    let first_set = self.first_set_impl(expr);
+                    set.extend(&first_set);
+                    if !first_set.contains(&"") {
+                        break;
+                    }
+                }
+            }
+            Expr::Choice(exprs) => {
+                for expr in exprs {
+                    set.extend(self.first_set_impl(expr));
+                }
+            }
+            Expr::Optional(expr) => {
+                set.extend(self.first_set_impl(expr));
+                set.insert("");
+            }
+            Expr::Repeat(expr) => {
+                set.extend(self.first_set_impl(expr));
+                set.insert("");
+            }
+        }
+
+        set
+    }
+}
+
+impl<'src> std::fmt::Debug for Grammar<'src> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if f.alternate() {
+            writeln!(f, "Grammar {{")?;
+            for (name, expr) in &self.rules {
+                writeln!(f, "  {}: {:?}", name, expr)?;
+            }
+            writeln!(f, "}}")
+        } else {
+            write!(f, "Grammar")
+        }
+    }
 }
 
 pub struct GrammarBuilder<'src> {
@@ -20,7 +84,7 @@ impl<'src> GrammarBuilder<'src> {
         Self { source, tree }
     }
 
-    pub fn build(mut self) -> Grammar<'src> {
+    pub fn build(self) -> Grammar<'src> {
         let mut rules = HashMap::new();
         for child in &self.tree.children {
             let Child::Tree(Tree {
@@ -85,9 +149,9 @@ impl<'src> GrammarBuilder<'src> {
 #[derive(Debug)]
 pub enum Expr<'src> {
     Literal(&'src str),
-    Sequence(Vec<Expr<'src>>),
-    Choice(Vec<Expr<'src>>),
-    Optional(Box<Expr<'src>>),
-    Repeat(Box<Expr<'src>>),
     Rule(&'src str),
+    Sequence(Vec<Self>),
+    Choice(Vec<Self>),
+    Optional(Box<Self>),
+    Repeat(Box<Self>),
 }
