@@ -10,19 +10,24 @@ pub struct Grammar<'src> {
 }
 
 impl<'src> Grammar<'src> {
-    pub fn first_set(&'src self, name: &str) -> HashSet<&'src str> {
+    pub fn first_set(&'src self, name: &'src str) -> HashSet<&'src str> {
         let expr = self
             .rules
             .get(name)
             .expect(&format!("rule not found {name:?}"));
-        self.first_set_impl(expr)
+        self.first_set_impl(expr, Some(name), &mut HashSet::from([name]))
     }
 
     pub fn non_terminals(&self) -> HashSet<&str> {
         self.rules.keys().copied().collect()
     }
 
-    pub fn first_set_impl(&'src self, expr: &'src Expr) -> HashSet<&'src str> {
+    pub fn first_set_impl(
+        &'src self,
+        expr: &'src Expr,
+        name: Option<&str>,
+        productions: &mut HashSet<&'src str>,
+    ) -> HashSet<&'src str> {
         let mut set: HashSet<&str> = HashSet::new();
 
         match expr {
@@ -30,7 +35,20 @@ impl<'src> Grammar<'src> {
                 set.insert(lit);
             }
             Expr::Rule(rule) => {
-                set.extend(self.first_set(rule));
+                if let Some(name) = name {
+                    if rule == &name {
+                        return set;
+                    }
+                }
+
+                if !productions.insert(rule) {
+                    return set;
+                }
+                let expr = self
+                    .rules
+                    .get(rule)
+                    .expect(&format!("rule not found {name:?}"));
+                set.extend(self.first_set_impl(expr, Some(rule), productions));
             }
             Expr::Sequence(exprs) => {
                 let mut iter = exprs.iter();
@@ -42,10 +60,10 @@ impl<'src> Grammar<'src> {
 
                     match curr {
                         Expr::Optional(expr) | Expr::Repeat(expr) => {
-                            set.extend(self.first_set_impl(expr));
+                            set.extend(self.first_set_impl(expr, name, productions));
                         }
                         _ => {
-                            set.extend(self.first_set_impl(curr));
+                            set.extend(self.first_set_impl(curr, name, productions));
                             break;
                         }
                     }
@@ -53,11 +71,11 @@ impl<'src> Grammar<'src> {
             }
             Expr::Choice(exprs) => {
                 for expr in exprs {
-                    set.extend(self.first_set_impl(expr));
+                    set.extend(self.first_set_impl(expr, name, productions));
                 }
             }
-            Expr::Optional(expr) => return self.first_set_impl(expr),
-            Expr::Repeat(expr) => return self.first_set_impl(expr),
+            Expr::Optional(expr) => return self.first_set_impl(expr, name, productions),
+            Expr::Repeat(expr) => return self.first_set_impl(expr, name, productions),
         }
 
         set
