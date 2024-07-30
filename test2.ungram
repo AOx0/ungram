@@ -1,4 +1,4 @@
 Test1 = 'a' | 'b' | 'c'
 Test2 = ('a' | 'b') 'c'
-Test3 = 'a'? 'c' 'd'?
+Test3 = 'a'? 'c'? 'd'?
 Test4 = 'a' ('c' 'd')*

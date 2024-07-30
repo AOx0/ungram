@@ -33,11 +33,21 @@ impl<'src> Grammar<'src> {
                 set.extend(self.first_set(rule));
             }
             Expr::Sequence(exprs) => {
-                for expr in exprs {
-                    let first_set = self.first_set_impl(expr);
-                    set.extend(&first_set);
-                    if !first_set.contains(&"") {
+                let mut iter = exprs.iter();
+                loop {
+                    let Some(curr) = iter.next() else {
+                        set.insert("ε"); // May have nothing as first
                         break;
+                    };
+
+                    match curr {
+                        Expr::Optional(expr) | Expr::Repeat(expr) => {
+                            set.extend(self.first_set_impl(expr));
+                        }
+                        _ => {
+                            set.extend(self.first_set_impl(curr));
+                            break;
+                        }
                     }
                 }
             }
@@ -46,14 +56,8 @@ impl<'src> Grammar<'src> {
                     set.extend(self.first_set_impl(expr));
                 }
             }
-            Expr::Optional(expr) => {
-                set.extend(self.first_set_impl(expr));
-                set.insert("");
-            }
-            Expr::Repeat(expr) => {
-                set.extend(self.first_set_impl(expr));
-                set.insert("");
-            }
+            Expr::Optional(expr) => return self.first_set_impl(expr),
+            Expr::Repeat(expr) => return self.first_set_impl(expr),
         }
 
         set
