@@ -1,7 +1,7 @@
 #[derive(Debug, Clone)]
 pub struct Ring<T, const SIZE: usize> {
-    pub data: [T; SIZE],
-    pub head: usize,
+    data: [T; SIZE],
+    head: usize,
 }
 
 impl<T, const SIZE: usize> Ring<T, SIZE> {

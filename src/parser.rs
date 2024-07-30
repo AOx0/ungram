@@ -191,8 +191,6 @@ mod grammar {
     }
 
     fn term(p: &mut Parser) {
-        println!("Term {:?}", p.peek_array());
-
         match p.peek() {
             Ident | Literal => {
                 let star_or_question = if matches!(p.peek_array(), [_, Star]) {
@@ -247,11 +245,8 @@ mod grammar {
         let mut branch = false;
         let mut passed_branch = false;
 
-        println!("Starting {:?}", p.peek_array());
-
         term(p);
         loop {
-            println!("{:?}", p.peek_array());
             match p.peek() {
                 Pipe => {
                     p.skip(); // Skip the pipe
