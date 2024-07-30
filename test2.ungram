@@ -3,3 +3,6 @@ Expr =
   | Expr '*' Expr
   | '(' Expr ')'
   | 'number'
+
+As = 'a' 'b' 'c' | 'c'
+Ass = 'a' 'b' 'c'

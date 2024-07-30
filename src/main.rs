@@ -25,6 +25,8 @@ fn main() {
             parser.parse();
             let tree = parser.tree();
 
+            // println!("{tree:#?}");
+
             let grammar = GrammarBuilder::new(&source, tree).build();
 
             println!("{grammar:#?}");

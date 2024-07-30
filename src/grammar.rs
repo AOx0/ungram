@@ -105,7 +105,7 @@ impl<'src> GrammarBuilder<'src> {
                 children,
             }) = child
             else {
-                panic!("expected rule");
+                panic!("expected rule found {:?}", child);
             };
 
             let name = match &children[0] {
@@ -139,6 +139,10 @@ impl<'src> GrammarBuilder<'src> {
                     Expr::Sequence(exprs)
                 }
                 Kind::Branch => {
+                    if tree.children.len() == 1 {
+                        return self.parse_expr(&tree.children[0]);
+                    }
+
                     let mut exprs = Vec::new();
                     for child in &tree.children {
                         exprs.push(self.parse_expr(child));

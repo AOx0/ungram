@@ -237,61 +237,30 @@ mod grammar {
     }
 
     fn expr(p: &mut Parser) -> MarkClose {
-        if p.peek_array() == [Ident, Equal] {
-            panic!("Unexpected rule definition");
-        }
+        let opened = p.open();
 
-        let mut opened = p.open();
-        let mut is_branch = false;
-        let mut last_was_pipe = false;
-        let mut parsed_in_sequence = 1;
-
+        let mut variant = p.open();
         term(p);
+
         loop {
             match p.peek() {
                 Pipe => {
-                    // Allows `Rule = A B C | d` as `Rule = (A B C) | d `
-                    if parsed_in_sequence > 1 {
-                        let closed = p.close(opened, super::Kind::Sequence);
-                        opened = p.open_before(closed);
-                    }
-
-                    p.skip(); // Skip the pipe
-                    is_branch = true;
-                    last_was_pipe = true;
+                    p.skip();
+                    p.close(variant, super::Kind::Sequence);
+                    variant = p.open();
+                }
+                Ident if p.peek_array() == [Ident, Equal] => {
+                    break;
                 }
                 Ident | Literal | Paren(Open) => {
-                    if !is_branch {
-                        parsed_in_sequence += 1;
-                    }
-
-                    if p.peek_array() == [Ident, Equal] {
-                        return if is_branch {
-                            p.close(opened, super::Kind::Branch)
-                        } else {
-                            p.close(opened, super::Kind::Sequence)
-                        };
-                    }
-
-                    if is_branch && !last_was_pipe {
-                        panic!(
-                            "Cant use sequence in branch at {:?}",
-                            p.lexer.peek_token().span.location(p.lexer.source())
-                        );
-                    }
-
-                    last_was_pipe = false;
-                    term(p)
+                    term(p);
                 }
                 _ => break,
             }
         }
 
-        if is_branch {
-            p.close(opened, super::Kind::Branch)
-        } else {
-            p.close(opened, super::Kind::Sequence)
-        }
+        p.close(variant, super::Kind::Sequence);
+        p.close(opened, super::Kind::Branch)
     }
 
     fn rule(p: &mut Parser) {
