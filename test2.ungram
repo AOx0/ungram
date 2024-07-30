@@ -1,2 +1,5 @@
-Program = (Program B) | ('c')
-B = 'a'
+Expr =
+    Expr '+' Expr
+  | Expr '*' Expr
+  | '(' Expr ')'
+  | 'number'

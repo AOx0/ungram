@@ -241,42 +241,53 @@ mod grammar {
             panic!("Unexpected rule definition");
         }
 
-        let opened = p.open();
-        let mut branch = false;
-        let mut passed_branch = false;
+        let mut opened = p.open();
+        let mut is_branch = false;
+        let mut last_was_pipe = false;
+        let mut parsed_in_sequence = 1;
 
         term(p);
         loop {
             match p.peek() {
                 Pipe => {
+                    // Allows `Rule = A B C | d` as `Rule = (A B C) | d `
+                    if parsed_in_sequence > 1 {
+                        let closed = p.close(opened, super::Kind::Sequence);
+                        opened = p.open_before(closed);
+                    }
+
                     p.skip(); // Skip the pipe
-                    branch = true;
-                    passed_branch = true;
+                    is_branch = true;
+                    last_was_pipe = true;
                 }
                 Ident | Literal | Paren(Open) => {
+                    if !is_branch {
+                        parsed_in_sequence += 1;
+                    }
+
                     if p.peek_array() == [Ident, Equal] {
-                        return if branch {
+                        return if is_branch {
                             p.close(opened, super::Kind::Branch)
                         } else {
                             p.close(opened, super::Kind::Sequence)
                         };
                     }
 
-                    if branch && !passed_branch {
+                    if is_branch && !last_was_pipe {
                         panic!(
                             "Cant use sequence in branch at {:?}",
                             p.lexer.peek_token().span.location(p.lexer.source())
                         );
                     }
 
-                    passed_branch = false;
+                    last_was_pipe = false;
                     term(p)
                 }
                 _ => break,
             }
         }
 
-        if branch {
+        if is_branch {
             p.close(opened, super::Kind::Branch)
         } else {
             p.close(opened, super::Kind::Sequence)
