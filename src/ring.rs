@@ -30,6 +30,15 @@ impl<T: Default + Clone + Copy, const SIZE: usize> Ring<T, SIZE> {
             head: 0,
         }
     }
+
+    pub fn data(&self) -> [T; SIZE] {
+        let mut data = [T::default(); SIZE];
+        for i in 0..SIZE {
+            data[i] = self.data[(self.head + i) % SIZE];
+        }
+
+        data
+    }
 }
 
 impl<T, const SIZE: usize> std::ops::Index<usize> for Ring<T, SIZE> {
@@ -43,6 +52,18 @@ impl<T, const SIZE: usize> std::ops::Index<usize> for Ring<T, SIZE> {
 #[cfg(test)]
 mod test {
     use crate::ring::Ring;
+
+    #[test]
+    fn test_ring_2() {
+        let mut ring = Ring::<i8, 2>::new();
+        ring.push(1);
+        ring.push(2);
+        assert_eq!(ring[0], 1);
+        assert_eq!(ring[1], 2);
+        ring.push(3);
+        assert_eq!(ring[0], 2);
+        assert_eq!(ring[1], 3);
+    }
 
     #[test]
     fn test_ring() {

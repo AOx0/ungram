@@ -1,10 +1,6 @@
-//! Recursive descent parser with an embedded pratt parser to
-//! parse grammar rules.
+//! Recursive descent parser
 
-use crate::{
-    lexer::Lexer,
-    token::{Kind as TKind, Token},
-};
+use crate::{lexer::Lexer, token};
 
 #[derive(Debug)]
 pub struct Tree {
@@ -12,158 +8,293 @@ pub struct Tree {
     pub children: Vec<Child>,
 }
 
-impl Tree {
-    pub fn rule(token: Token) -> Self {
-        Self {
-            kind: Kind::Rule,
-            children: vec![Child::Token(token)],
-        }
-    }
+#[derive(Debug, PartialEq, Eq)]
+enum Event {
+    Open { kind: Kind },
+    Close,
+    Skip,
+    Advance { token: token::Token },
 }
 
 #[derive(Debug)]
 pub enum Child {
     Tree(Tree),
-    Token(Token),
+    Token(token::Token),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum Kind {
     Grammar,
     Rule,
+    Sequence,
     ZeroOrMore,
     Optional,
-    Sequence,
     Branch,
+    Error,
+}
+
+struct MarkOpen {
+    index: usize,
+}
+
+struct MarkClose {
+    index: usize,
 }
 
 pub struct Parser<'src> {
     lexer: Lexer<'src, 2>,
+    events: Vec<Event>,
 }
 
 impl<'src> Parser<'src> {
     pub fn new(source: &'src str) -> Self {
         Self {
             lexer: Lexer::new(source),
+            events: Vec::new(),
         }
     }
 
     fn eof(&mut self) -> bool {
-        self.lexer.peek_kind() == TKind::Eof
+        self.lexer.peek_kind() == token::Kind::Eof
     }
 
-    fn advance(&mut self) -> Token {
-        self.lexer.next_token()
+    fn advance(&mut self) {
+        let token = self.lexer.next_token();
+        self.events.push(Event::Advance { token });
     }
 
-    fn advance_if(&mut self, kind: crate::token::Kind) -> Option<Token> {
-        (self.lexer.peek_kind() == kind).then(|| self.lexer.next_token())
+    fn skip(&mut self) {
+        self.lexer.advance();
+        self.events.push(Event::Skip);
     }
 
-    pub fn parse(mut self) -> Tree {
-        let mut tree = Tree {
-            kind: Kind::Grammar,
-            children: Vec::new(),
-        };
-
-        while !self.eof() {
-            let rule = self.parse_rule();
-            tree.children.push(Child::Tree(rule));
+    fn skip_if(&mut self, kind: token::Kind) -> bool {
+        if self.lexer.peek_kind() == kind {
+            self.skip();
+            true
+        } else {
+            false
         }
-
-        tree
     }
 
-    pub fn parse_rule(&mut self) -> Tree {
-        let mut tree = Tree {
-            kind: Kind::Rule,
-            children: Vec::new(),
-        };
-
-        let Some(name) = self.advance_if(TKind::Ident) else {
+    fn skip_expect(&mut self, kind: token::Kind) {
+        if !self.skip_if(kind) {
+            let token = self.lexer.peek_token();
             panic!(
-                "Expected identifier found {:?} at {:?}",
-                self.lexer.peek_token(),
-                self.lexer.peek_token().span.location(self.lexer.source())
+                "Skip expected {:?}, got {:?} at {:?}",
+                kind,
+                token,
+                token.span.location(self.lexer.source())
             );
-        };
-
-        let _ = self.advance_if(TKind::Equal).unwrap();
-
-        let expr = self.parse_expr();
-        tree.children.push(Child::Tree(expr));
-
-        tree
+        }
     }
 
-    pub fn peek(&mut self) -> TKind {
+    fn open(&mut self) -> MarkOpen {
+        self.events.push(Event::Open { kind: Kind::Error });
+        MarkOpen {
+            index: self.events.len() - 1,
+        }
+    }
+
+    fn close(&mut self, opened: MarkOpen, kind: Kind) -> MarkClose {
+        self.events[opened.index] = Event::Open { kind };
+        self.events.push(Event::Close);
+        MarkClose {
+            index: opened.index,
+        }
+    }
+
+    fn open_before(&mut self, opened: MarkClose) -> MarkOpen {
+        self.events
+            .insert(opened.index, Event::Open { kind: Kind::Error });
+        MarkOpen {
+            index: opened.index,
+        }
+    }
+
+    fn expect(&mut self, kind: token::Kind) {
+        if self.advance_if(kind) {
+            return;
+        } else {
+            let token = self.lexer.peek_token();
+            panic!(
+                "Expected {:?}, got {:?} at {:?}",
+                kind,
+                token,
+                token.span.location(self.lexer.source())
+            );
+        }
+    }
+
+    fn advance_if(&mut self, kind: crate::token::Kind) -> bool {
+        if self.lexer.peek_kind() == kind {
+            self.advance();
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn peek_array(&mut self) -> [token::Kind; 2] {
+        self.lexer.peek_array()
+    }
+
+    pub fn peek(&mut self) -> token::Kind {
         self.lexer.peek_kind()
     }
 
-    // Uses pratt parsing technique with absolute order of precedence
-    // based on
-    pub fn parse_expr(&mut self) -> Tree {
-        use crate::token::Paren;
-        use TKind::*;
+    pub fn parse(&mut self) {
+        grammar::file(self);
+    }
 
-        let mut seq = Tree {
-            kind: Kind::Sequence,
-            children: vec![match self.peek() {
-                Ident => Child::Token(self.advance()),
-                Literal => Child::Token(self.advance()),
-                Paren(Paren::Open) => {
-                    let _ = self.advance_if(Paren(Paren::Open)).unwrap();
-                    let expr = self.parse_expr();
-                    let _ = self.advance_if(Paren(Paren::Close)).unwrap();
-                    Child::Tree(expr)
-                }
-                _ => panic!("Unexpected token"),
-            }],
-        };
+    pub fn tree(mut self) -> Tree {
+        let mut stack = Vec::new();
 
-        while !matches!(self.lexer.peek_array(), [Ident, Equal]) {
-            match self.peek() {
-                Ident if matches!(self.lexer.peek_array(), [Ident, Equal]) => break,
-                Paren(Paren::Close) => break,
-                Eof => break,
-                Pipe => {
-                    let _ = self.advance_if(Pipe).unwrap();
-                    let rhs = self.parse_expr();
-                    seq.kind = Kind::Branch;
-                    seq.children.push(Child::Tree(rhs));
+        assert_eq!(self.events.pop(), Some(Event::Close));
+
+        for event in self.events {
+            match event {
+                Event::Open { kind } => {
+                    stack.push(Tree {
+                        kind,
+                        children: Vec::new(),
+                    });
                 }
-                Star => {
-                    let _ = self.advance_if(Star).unwrap();
-                    seq = Tree {
-                        kind: Kind::ZeroOrMore,
-                        children: vec![Child::Tree(seq)],
-                    };
+                Event::Close => {
+                    let tree = stack.pop().unwrap();
+                    stack.last_mut().unwrap().children.push(Child::Tree(tree));
                 }
-                Question => {
-                    let _ = self.advance_if(Question).unwrap();
-                    seq = Tree {
-                        kind: Kind::Optional,
-                        children: vec![Child::Tree(seq)],
-                    };
+                Event::Skip => {}
+                Event::Advance { token } => {
+                    stack.last_mut().unwrap().children.push(Child::Token(token));
                 }
-                Ident | Literal => {
-                    seq.children.push(Child::Token(self.advance()));
-                }
-                Paren(Paren::Open) => {
-                    let _ = self.advance_if(Paren(Paren::Open)).unwrap();
-                    let expr = self.parse_expr();
-                    let _ = self.advance_if(Paren(Paren::Close)).unwrap();
-                    seq.children.push(Child::Tree(expr));
-                }
-                _ => panic!(
-                    "Unexpected token {:?} at {:?} status:\n{:#?}",
-                    self.lexer.peek_token(),
-                    self.lexer.peek_token().span.location(self.lexer.source()),
-                    seq
-                ),
             }
         }
 
-        seq
+        stack.pop().unwrap()
+    }
+}
+
+mod grammar {
+    use super::MarkClose;
+    use super::Parser;
+    use crate::token::Kind::*;
+    use crate::token::Paren::*;
+
+    pub fn file(p: &mut Parser) {
+        let opened = p.open();
+        while !p.eof() {
+            rule(p);
+        }
+
+        p.close(opened, super::Kind::Grammar);
+    }
+
+    fn term(p: &mut Parser) {
+        println!("Term {:?}", p.peek_array());
+
+        match p.peek() {
+            Ident | Literal => {
+                let star_or_question = if matches!(p.peek_array(), [_, Star]) {
+                    Some(Star)
+                } else if matches!(p.peek_array(), [_, Question]) {
+                    Some(Question)
+                } else {
+                    None
+                };
+
+                if let Some(star_or_question) = star_or_question {
+                    let mark = p.open();
+                    p.advance();
+                    p.skip();
+                    p.close(
+                        mark,
+                        match star_or_question {
+                            Star => super::Kind::ZeroOrMore,
+                            Question => super::Kind::Optional,
+                            _ => unreachable!(),
+                        },
+                    );
+                } else {
+                    p.advance();
+                }
+            }
+            Paren(Open) => {
+                p.skip();
+                let close = expr(p);
+                p.skip_expect(Paren(Close));
+
+                if p.peek() == Star {
+                    let mark = p.open_before(close);
+                    p.skip();
+                    p.close(mark, super::Kind::ZeroOrMore);
+                } else if p.peek() == Question {
+                    let mark = p.open_before(close);
+                    p.skip();
+                    p.close(mark, super::Kind::Optional);
+                }
+            }
+            _ => panic!("Unexpected token"),
+        }
+    }
+
+    fn expr(p: &mut Parser) -> MarkClose {
+        if p.peek_array() == [Ident, Equal] {
+            panic!("Unexpected rule definition");
+        }
+
+        let opened = p.open();
+        let mut branch = false;
+        let mut passed_branch = false;
+
+        println!("Starting {:?}", p.peek_array());
+
+        term(p);
+        loop {
+            println!("{:?}", p.peek_array());
+            match p.peek() {
+                Pipe => {
+                    p.skip(); // Skip the pipe
+                    branch = true;
+                    passed_branch = true;
+                }
+                Ident | Literal | Paren(Open) => {
+                    if p.peek_array() == [Ident, Equal] {
+                        return if branch {
+                            p.close(opened, super::Kind::Branch)
+                        } else {
+                            p.close(opened, super::Kind::Sequence)
+                        };
+                    }
+
+                    if branch && !passed_branch {
+                        panic!(
+                            "Cant use sequence in branch at {:?}",
+                            p.lexer.peek_token().span.location(p.lexer.source())
+                        );
+                    }
+
+                    passed_branch = false;
+                    term(p)
+                }
+                _ => break,
+            }
+        }
+
+        if branch {
+            p.close(opened, super::Kind::Branch)
+        } else {
+            p.close(opened, super::Kind::Sequence)
+        }
+    }
+
+    fn rule(p: &mut Parser) {
+        let opened = p.open();
+        p.expect(Ident);
+        p.skip_expect(Equal);
+
+        expr(p);
+
+        p.close(opened, super::Kind::Rule);
     }
 }

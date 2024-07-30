@@ -29,8 +29,8 @@ impl<'src, const LOOKUP: usize> Lexer<'src, LOOKUP> {
         self.inner.source()
     }
 
-    pub fn peek_array(&self) -> &[token::Kind; LOOKUP] {
-        &self.buffer_kind.data
+    pub fn peek_array(&self) -> [token::Kind; LOOKUP] {
+        self.buffer_kind.data()
     }
 
     pub fn peek_token(&self) -> token::Token {
@@ -72,5 +72,50 @@ impl Iterator for Lexer<'_, 1> {
 
     fn next(&mut self) -> Option<Self::Item> {
         (self.peek_kind() != token::Kind::Eof).then(|| self.next_token())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::token::Paren;
+
+    #[test]
+    fn test_ring() {
+        let source = "(|)a";
+        let mut lexer = super::Lexer::<2>::new(source);
+
+        assert_eq!(
+            lexer.peek_array(),
+            [
+                super::token::Kind::Paren(Paren::Open),
+                super::token::Kind::Pipe
+            ]
+        );
+        lexer.advance();
+        assert_eq!(
+            lexer.peek_array(),
+            [
+                super::token::Kind::Pipe,
+                super::token::Kind::Paren(Paren::Close)
+            ]
+        );
+        lexer.advance();
+        assert_eq!(
+            lexer.peek_array(),
+            [
+                super::token::Kind::Paren(Paren::Close),
+                super::token::Kind::Ident
+            ]
+        );
+        lexer.advance();
+        assert_eq!(
+            lexer.peek_array(),
+            [super::token::Kind::Ident, super::token::Kind::Eof]
+        );
+        lexer.advance();
+        assert_eq!(
+            lexer.peek_array(),
+            [super::token::Kind::Eof, super::token::Kind::Eof]
+        );
     }
 }

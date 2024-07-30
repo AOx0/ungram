@@ -20,8 +20,9 @@ fn main() {
         }
         args::Command::Parse { path } => {
             let source = std::fs::read_to_string(&path).unwrap();
-            let parser = parser::Parser::new(&source);
-            let ast = parser.parse();
+            let mut parser = parser::Parser::new(&source);
+            parser.parse();
+            let ast = parser.tree();
 
             println!("{:#?}", ast);
         }
