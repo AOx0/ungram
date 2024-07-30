@@ -1,6 +1,6 @@
-// Test = 'a' | 'b' | 'c'
-// Test2 = ('a' | 'b') 'c'
-// Test3 = 'a' 'c' 'd'?
-// Test4 = 'a' ('c' 'd')*
-// Test5 = 'a' ((a | b)* | 'd')*
+Test = 'a' | 'b' | 'c'
+Test2 = ('a' | 'b') 'c'
+Test3 = 'a' 'c' 'd'?
+Test4 = 'a' ('c' 'd')*
+Test5 = 'a' ((a | b)* | 'd')*
 Test6 = 'a'? b 'c'

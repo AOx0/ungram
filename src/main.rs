@@ -1,7 +1,8 @@
 use clap::Parser;
-use logos::Logos;
+use grammar::GrammarBuilder;
 
 mod args;
+mod grammar;
 mod lexer;
 mod parser;
 mod ring;
@@ -22,9 +23,11 @@ fn main() {
             let source = std::fs::read_to_string(&path).unwrap();
             let mut parser = parser::Parser::new(&source);
             parser.parse();
-            let ast = parser.tree();
+            let tree = parser.tree();
 
-            println!("{:#?}", ast);
+            let grammar = GrammarBuilder::new(&source, tree).build();
+
+            println!("{grammar:#?}");
         }
     }
 }

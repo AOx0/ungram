@@ -23,7 +23,7 @@ pub enum Child {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum Kind {
+pub enum Kind {
     Grammar,
     Rule,
     Sequence,

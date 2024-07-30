@@ -1,4 +1,5 @@
 #[derive(Debug, PartialEq, Eq, Clone, Copy, logos::Logos, Default)]
+#[repr(u8)]
 pub enum Kind {
     #[regex("[ \t\r\n]+", logos::skip)]
     Ignored,
