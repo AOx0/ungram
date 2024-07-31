@@ -1,3 +1,4 @@
+S = File '#'
 File = Fn*
 
 Fn = 'fn' 'name' ParamList ('->' TypeExpr)? Block

@@ -33,9 +33,8 @@ impl<'src> Grammar<'src> {
                 let mut iter = exprs.iter();
                 let mut last_may_be_empty = false;
 
-                while let Some(curr) = iter.next() {
-                    let is_match =
-                        matches!(curr, Expr::Rule(rule) if rule == &of) || last_may_be_empty;
+                while let Some(expr) = iter.next() {
+                    let is_match = last_may_be_empty || expr.produces_at_end(&Expr::Rule(of));
                     if is_match.not() {
                         continue;
                     };
@@ -49,7 +48,8 @@ impl<'src> Grammar<'src> {
                         let contains_empty = first.remove("ε");
                         set.extend(first);
 
-                        last_may_be_empty = contains_empty;
+                        // I believe this is redundant
+                        last_may_be_empty = contains_empty || expr.may_miss();
                         contains_empty
                     } else {
                         true
@@ -232,7 +232,7 @@ impl<'src> GrammarBuilder<'src> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Expr<'src> {
     Literal(&'src str),
     Rule(&'src str),
@@ -251,6 +251,17 @@ impl<'src> Expr<'src> {
             Expr::Rule(_) => false,
             Expr::Sequence(_) => false,
             Expr::Choice(_) => false,
+        }
+    }
+
+    fn produces_at_end(&self, expr: &Expr) -> bool {
+        match self {
+            x @ Expr::Literal(_) => expr == x,
+            x @ Expr::Rule(_) => expr == x,
+            Expr::Sequence(exprs) => exprs.last().is_some_and(|x| expr == x),
+            Expr::Choice(branches) => branches.iter().any(|x| x.produces_at_end(expr)),
+            Expr::Optional(x) => x.produces_at_end(expr),
+            Expr::Repeat(x) => x.produces_at_end(expr),
         }
     }
 }
