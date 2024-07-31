@@ -4,5 +4,6 @@ Expr =
   | '(' Expr ')'
   | 'number'
 
-As = 'a' 'b' 'c' | 'c'
-Ass = 'a' 'b' 'c'
+S = A B*
+A = 'a' A*
+B = 'b'

@@ -12,10 +12,17 @@ pub enum Command {
     Lex {
         path: PathBuf,
     },
+    Tree {
+        path: PathBuf,
+    },
     Parse {
         path: PathBuf,
     },
     First {
+        path: PathBuf,
+        non_terminal: Option<String>,
+    },
+    Follow {
         path: PathBuf,
         non_terminal: Option<String>,
     },

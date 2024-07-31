@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Not,
+};
 
 use crate::{
     parser::{Child, Kind, Tree},
@@ -6,10 +9,66 @@ use crate::{
 };
 
 pub struct Grammar<'src> {
-    rules: HashMap<&'src str, Expr<'src>>,
+    pub rules: HashMap<&'src str, Expr<'src>>,
 }
 
 impl<'src> Grammar<'src> {
+    pub fn follow_set_impl(
+        &'src self,
+        of: &str,
+        parent: &str,
+        expr: &'src Expr,
+    ) -> HashSet<&'src str> {
+        let mut set = HashSet::new();
+
+        // We are going to look at each rule and find the places where `of` is mentioned
+        match expr {
+            Expr::Choice(branches) => {
+                for branch in branches {
+                    set.extend(self.follow_set_impl(of, parent, branch))
+                }
+            }
+            Expr::Sequence(exprs) => {
+                let mut iter = exprs.iter();
+                let mut last_may_be_empty = false;
+
+                while let Some(curr) = iter.next() {
+                    let is_match =
+                        matches!(curr, Expr::Rule(rule) if rule == &of) || last_may_be_empty;
+                    if is_match.not() {
+                        continue;
+                    };
+
+                    let next = iter.clone().next();
+                    // Up to this point we have a derivation Z -> ..Aβ, now:
+
+                    // - We compute the FIRST set of the following expression β
+                    let perform_follow = if let Some(expr) = next {
+                        let mut first = self.first_set_impl(expr, &mut HashSet::new());
+                        let contains_empty = first.remove("ε");
+                        set.extend(first);
+
+                        last_may_be_empty = contains_empty;
+                        contains_empty
+                    } else {
+                        true
+                    };
+
+                    // - If theres no following expr or FIRST(β) contains ε we compute
+                    // FOLLOW(β) and add it to the FOLLOW(A)
+                    if perform_follow {
+                        for (sub_name, sub_rule) in self.rules.iter() {
+                            set.extend(self.follow_set_impl(parent, sub_name, sub_rule));
+                        }
+                    }
+                }
+            }
+            _ => panic!("Non valid expr from {parent:?}: {expr:?}"),
+        }
+
+        set
+    }
+
     pub fn first_set(&'src self, name: &'src str) -> HashSet<&'src str> {
         let expr = self
             .rules
@@ -171,4 +230,17 @@ pub enum Expr<'src> {
     Choice(Vec<Self>),
     Optional(Box<Self>),
     Repeat(Box<Self>),
+}
+
+impl<'src> Expr<'src> {
+    fn may_miss(&self) -> bool {
+        match self {
+            Expr::Optional(_) => true,
+            Expr::Repeat(_) => true,
+            Expr::Literal(_) => false,
+            Expr::Rule(_) => false,
+            Expr::Sequence(_) => false,
+            Expr::Choice(_) => false,
+        }
+    }
 }
