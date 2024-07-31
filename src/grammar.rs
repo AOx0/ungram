@@ -39,8 +39,16 @@ impl<'src> Grammar<'src> {
                         continue;
                     };
 
-                    let next = iter.clone().next();
                     // Up to this point we have a derivation Z -> ..Aβ, now:
+                    let next = iter.clone().next();
+
+                    // Computes the first set of self in cases where repetition of self is possible
+                    // i.e `Fn*` may produce `Fn Fn`, hence FIRST(Fn) must be added to FOLLOW(Fn)
+                    if let Expr::Repeat(expr) = expr
+                        && expr.produces_at_end(expr)
+                    {
+                        set.extend(self.first_set_impl(expr, productions))
+                    }
 
                     // - We compute the FIRST set of the following expression β
                     let perform_follow = if let Some(expr) = next {
