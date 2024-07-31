@@ -6,5 +6,4 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.5.11", features = ["derive"] }
 indexmap = "2.2.6"
-itertools = "0.13.0"
 logos = "0.14.0"

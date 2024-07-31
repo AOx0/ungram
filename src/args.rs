@@ -25,5 +25,8 @@ pub enum Command {
     Follow {
         path: PathBuf,
         non_terminal: Option<String>,
+        /// Do not add FIRST(self) when self repeats i.e Fn*
+        #[clap(long, short)]
+        strict: bool,
     },
 }

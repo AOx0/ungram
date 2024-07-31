@@ -58,7 +58,11 @@ fn main() {
                 }
             }
         }
-        args::Command::Follow { path, non_terminal } => {
+        args::Command::Follow {
+            path,
+            non_terminal,
+            strict,
+        } => {
             let source = std::fs::read_to_string(&path).unwrap();
             let mut parser = parser::Parser::new(&source);
             parser.parse();
@@ -69,7 +73,13 @@ fn main() {
             for nt in grammar.non_terminals() {
                 let mut follow = HashSet::new();
                 for (name, rule) in grammar.rules.iter() {
-                    let f = grammar.follow_set_impl(&nt, name, rule, &mut IndexSet::from([*name]));
+                    let f = grammar.follow_set_impl(
+                        &nt,
+                        name,
+                        rule,
+                        &mut IndexSet::from([*name]),
+                        strict,
+                    );
                     follow.extend(f);
                 }
                 println!("{nt}: {follow:?}");

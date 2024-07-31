@@ -1,7 +1,6 @@
 use std::ops::Not;
 
 use indexmap::{IndexMap, IndexSet};
-use itertools::Itertools;
 
 use crate::{
     parser::{Child, Kind, Tree},
@@ -19,13 +18,15 @@ impl<'src> Grammar<'src> {
         parent: &'src str,
         expr: &'src Expr,
         productions: &mut IndexSet<&'src str>,
+        // Whether self repetitions add FIRST(self) to FOLLOW(self)
+        strict: bool,
     ) -> IndexSet<&'src str> {
         let mut set = IndexSet::new();
 
         match expr {
             Expr::Choice(branches) => {
                 for branch in branches {
-                    set.extend(self.follow_set_impl(of, parent, branch, productions))
+                    set.extend(self.follow_set_impl(of, parent, branch, productions, strict))
                 }
             }
             Expr::Sequence(exprs) => {
@@ -45,6 +46,7 @@ impl<'src> Grammar<'src> {
                     // i.e `Fn*` may produce `Fn Fn`, hence FIRST(Fn) must be added to FOLLOW(Fn)
                     if let Expr::Repeat(rep) = expr
                         && rep.produces_at_end(&Expr::Rule(of))
+                        && !strict
                     {
                         set.extend(self.first_set_impl(rep, &mut IndexSet::new()));
                     }
@@ -55,8 +57,7 @@ impl<'src> Grammar<'src> {
                         let contains_empty = first.swap_remove("ε");
                         set.extend(first);
 
-                        // I believe this is redundant
-                        last_may_be_empty = contains_empty;
+                        last_may_be_empty = contains_empty || expr.may_miss(&self.rules);
                         contains_empty
                     } else {
                         true
@@ -75,6 +76,7 @@ impl<'src> Grammar<'src> {
                                 sub_name,
                                 sub_rule,
                                 &mut productions,
+                                strict,
                             ));
                         }
                     };
@@ -137,7 +139,7 @@ impl<'src> Grammar<'src> {
                                     .get(rule)
                                     .unwrap()
                                     .is_alias(&Expr::Rule(r), &self.rules)
-                            }) =>
+                            }) && curr.may_miss(&self.rules) =>
                         {
                             set.extend(self.first_set_impl(curr, productions));
                         }
@@ -260,12 +262,12 @@ pub enum Expr<'src> {
 }
 
 impl<'src> Expr<'src> {
-    fn may_miss(&self) -> bool {
+    fn may_miss(&self, rules: &IndexMap<&str, Expr>) -> bool {
         match self {
             Expr::Literal(_) => false,
-            Expr::Rule(_) => false,
-            Expr::Sequence(exprs) => exprs.iter().all(|x| x.may_miss()),
-            Expr::Choice(branches) => branches.iter().all(|x| x.may_miss()),
+            Expr::Rule(rule) => rules.get(rule).unwrap().may_miss(rules),
+            Expr::Sequence(exprs) => exprs.iter().any(|x| x.may_miss(rules)),
+            Expr::Choice(exprs) => exprs.iter().any(|x| x.may_miss(rules)),
             Expr::Optional(_) => true,
             Expr::Repeat(_) => true,
         }
@@ -279,7 +281,7 @@ impl<'src> Expr<'src> {
         };
 
         match self {
-            Expr::Rule(rule) => rule == name || rules.get(rule).unwrap().is_alias(expr, rules),
+            x @ Expr::Rule(rule) => rule == name || rules.get(name).unwrap().is_alias(x, rules),
             Expr::Sequence(exprs) => {
                 if exprs.len() != 1 {
                     return false;

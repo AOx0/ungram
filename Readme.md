@@ -29,11 +29,11 @@ ungram first example.ungram
 
 Output:
 ```py
-S: {"ε", "fn"}
-Fn: {"fn"}
+S: {"fn", "ε"}
 File: {"fn", "ε"}
-Param: {"name"}
+Fn: {"fn"}
 ParamList: {"("}
+Param: {"name"}
 Block: {"{"}
 ```
 
@@ -45,12 +45,12 @@ ungram follow example.ungram
 
 Output:
 ```py
-Fn: {"#", "fn"}
-Param: {"name", ")"}
 S: {}
-Block: {"#"}
 File: {"#"}
+Fn: {"fn", "#"}
 ParamList: {"{", "->"}
+Param: {"name", ")"}
+Block: {"fn", "#"}
 ```
 
 [1]: https://rust-analyzer.github.io/blog/2020/10/24/introducing-ungrammar.html
