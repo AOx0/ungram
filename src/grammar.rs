@@ -1,7 +1,7 @@
-use std::{
-    collections::{HashMap, HashSet},
-    ops::Not,
-};
+use std::ops::Not;
+
+use indexmap::{IndexMap, IndexSet};
+use itertools::Itertools;
 
 use crate::{
     parser::{Child, Kind, Tree},
@@ -9,7 +9,7 @@ use crate::{
 };
 
 pub struct Grammar<'src> {
-    pub rules: HashMap<&'src str, Expr<'src>>,
+    pub rules: IndexMap<&'src str, Expr<'src>>,
 }
 
 impl<'src> Grammar<'src> {
@@ -18,9 +18,9 @@ impl<'src> Grammar<'src> {
         of: &str,
         parent: &'src str,
         expr: &'src Expr,
-        productions: &mut HashSet<&'src str>,
-    ) -> HashSet<&'src str> {
-        let mut set = HashSet::new();
+        productions: &mut IndexSet<&'src str>,
+    ) -> IndexSet<&'src str> {
+        let mut set = IndexSet::new();
 
         match expr {
             Expr::Choice(branches) => {
@@ -46,13 +46,13 @@ impl<'src> Grammar<'src> {
                     if let Expr::Repeat(rep) = expr
                         && rep.produces_at_end(&Expr::Rule(of))
                     {
-                        set.extend(self.first_set_impl(rep, &mut HashSet::new()));
+                        set.extend(self.first_set_impl(rep, &mut IndexSet::new()));
                     }
 
                     // - We compute the FIRST set of the following expression β
                     let perform_follow = if let Some(expr) = next {
-                        let mut first = self.first_set_impl(expr, &mut HashSet::new());
-                        let contains_empty = first.remove("ε");
+                        let mut first = self.first_set_impl(expr, &mut IndexSet::new());
+                        let contains_empty = first.swap_remove("ε");
                         set.extend(first);
 
                         // I believe this is redundant
@@ -86,24 +86,24 @@ impl<'src> Grammar<'src> {
         set
     }
 
-    pub fn first_set(&'src self, name: &'src str) -> HashSet<&'src str> {
+    pub fn first_set(&'src self, name: &'src str) -> IndexSet<&'src str> {
         let expr = self
             .rules
             .get(name)
             .expect(&format!("rule not found {name:?}"));
-        self.first_set_impl(expr, &mut HashSet::from([name]))
+        self.first_set_impl(expr, &mut IndexSet::from([name]))
     }
 
-    pub fn non_terminals(&self) -> HashSet<&str> {
+    pub fn non_terminals(&self) -> IndexSet<&str> {
         self.rules.keys().copied().collect()
     }
 
     pub fn first_set_impl(
         &'src self,
         expr: &'src Expr,
-        productions: &mut HashSet<&'src str>,
-    ) -> HashSet<&'src str> {
-        let mut set: HashSet<&str> = HashSet::new();
+        productions: &mut IndexSet<&'src str>,
+    ) -> IndexSet<&'src str> {
+        let mut set: IndexSet<&str> = IndexSet::new();
 
         match expr {
             Expr::Literal(lit) => {
@@ -131,7 +131,16 @@ impl<'src> Grammar<'src> {
                         Expr::Optional(expr) | Expr::Repeat(expr) => {
                             set.extend(self.first_set_impl(expr, productions));
                         }
-                        Expr::Rule(rule) if productions.contains(rule) => {}
+                        Expr::Rule(rule)
+                            if productions.iter().all(|r| {
+                                self.rules
+                                    .get(rule)
+                                    .unwrap()
+                                    .is_alias(&Expr::Rule(r), &self.rules)
+                            }) =>
+                        {
+                            set.extend(self.first_set_impl(curr, productions));
+                        }
                         _ => {
                             set.extend(self.first_set_impl(curr, productions));
                             break;
@@ -175,7 +184,7 @@ impl<'src> GrammarBuilder<'src> {
     }
 
     pub fn build(self) -> Grammar<'src> {
-        let mut rules = HashMap::new();
+        let mut rules = IndexMap::new();
         for child in &self.tree.children {
             let Child::Tree(Tree {
                 kind: Kind::Rule,
@@ -262,14 +271,25 @@ impl<'src> Expr<'src> {
         }
     }
 
-    fn produces(&self, expr: &Expr) -> bool {
+    fn is_alias(&self, expr: &Expr, rules: &IndexMap<&str, Expr>) -> bool {
+        assert!(matches!(expr, Expr::Rule(_)));
+
+        let Expr::Rule(name) = expr else {
+            return false;
+        };
+
         match self {
-            x @ Expr::Literal(_) => expr == x,
-            x @ Expr::Rule(_) => expr == x,
-            Expr::Sequence(exprs) => exprs.iter().any(|x| x.produces(expr)),
-            Expr::Choice(branches) => branches.iter().any(|x| x.produces(expr)),
-            Expr::Optional(x) => x.produces(expr),
-            Expr::Repeat(x) => x.produces(expr),
+            Expr::Rule(rule) => rule == name || rules.get(rule).unwrap().is_alias(expr, rules),
+            Expr::Sequence(exprs) => {
+                if exprs.len() != 1 {
+                    return false;
+                }
+                exprs[0].is_alias(expr, rules)
+            }
+            Expr::Choice(branches) => branches.iter().any(|x| x.is_alias(expr, rules)),
+            Expr::Optional(x) => x.is_alias(expr, rules),
+            Expr::Repeat(x) => x.is_alias(expr, rules),
+            _ => false,
         }
     }
 
