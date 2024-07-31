@@ -22,7 +22,6 @@ impl<'src> Grammar<'src> {
     ) -> HashSet<&'src str> {
         let mut set = HashSet::new();
 
-        // We are going to look at each rule and find the places where `of` is mentioned
         match expr {
             Expr::Choice(branches) => {
                 for branch in branches {
@@ -44,10 +43,10 @@ impl<'src> Grammar<'src> {
 
                     // Computes the first set of self in cases where repetition of self is possible
                     // i.e `Fn*` may produce `Fn Fn`, hence FIRST(Fn) must be added to FOLLOW(Fn)
-                    if let Expr::Repeat(expr) = expr
-                        && expr.produces_at_end(expr)
+                    if let Expr::Repeat(rep) = expr
+                        && rep.produces_at_end(&Expr::Rule(of))
                     {
-                        set.extend(self.first_set_impl(expr, productions))
+                        set.extend(self.first_set_impl(rep, &mut HashSet::new()));
                     }
 
                     // - We compute the FIRST set of the following expression β
