@@ -2,5 +2,5 @@ Program = 'var' Variables* 'begin' Operators* 'end'
 Variables = Variable ';' Variables*
 Variable = 'identifier'
 Operators = Operator ';' Operators*
-Operator = ('read' '(' Variable ')')
-| ('write' '(' Variable ')')
+Operator = 'read' '(' Variable ')'
+| 'write' '(' Variable ')'

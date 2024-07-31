@@ -68,7 +68,7 @@ fn main() {
             for nt in grammar.non_terminals() {
                 let mut follow = HashSet::new();
                 for (name, rule) in grammar.rules.iter() {
-                    let f = grammar.follow_set_impl(&nt, name, rule);
+                    let f = grammar.follow_set_impl(&nt, name, rule, &mut HashSet::from([*name]));
                     follow.extend(f);
                 }
                 println!("{nt}: {follow:?}");

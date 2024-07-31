@@ -16,8 +16,9 @@ impl<'src> Grammar<'src> {
     pub fn follow_set_impl(
         &'src self,
         of: &str,
-        parent: &str,
+        parent: &'src str,
         expr: &'src Expr,
+        productions: &mut HashSet<&'src str>,
     ) -> HashSet<&'src str> {
         let mut set = HashSet::new();
 
@@ -25,7 +26,7 @@ impl<'src> Grammar<'src> {
         match expr {
             Expr::Choice(branches) => {
                 for branch in branches {
-                    set.extend(self.follow_set_impl(of, parent, branch))
+                    set.extend(self.follow_set_impl(of, parent, branch, productions))
                 }
             }
             Expr::Sequence(exprs) => {
@@ -58,9 +59,18 @@ impl<'src> Grammar<'src> {
                     // FOLLOW(β) and add it to the FOLLOW(A)
                     if perform_follow {
                         for (sub_name, sub_rule) in self.rules.iter() {
-                            set.extend(self.follow_set_impl(parent, sub_name, sub_rule));
+                            let mut productions = productions.clone();
+                            if !productions.insert(sub_name) {
+                                continue;
+                            };
+                            set.extend(self.follow_set_impl(
+                                parent,
+                                sub_name,
+                                sub_rule,
+                                &mut productions,
+                            ));
                         }
-                    }
+                    };
                 }
             }
             _ => panic!("Non valid expr from {parent:?}: {expr:?}"),
