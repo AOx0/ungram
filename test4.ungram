@@ -1,6 +1,0 @@
-S = E '#'
-E = T Ep
-Ep = ('+' T Ep)*
-T = F Tp
-Tp = ('*' F Tp)*
-F = '(' E ')' | 'id'

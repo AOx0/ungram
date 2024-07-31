@@ -1,9 +1,0 @@
-Expr =
-    Expr '+' Expr
-  | Expr '*' Expr
-  | '(' Expr ')'
-  | 'number'
-
-S = A B*
-A = 'a' A*
-B = 'b'

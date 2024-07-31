@@ -22,6 +22,7 @@ pub enum Kind {
     #[regex(r"'([^'\\]|\\['\\bnfrt]|u[a-fA-F0-9]{4})*'")]
     Literal,
 
+    #[regex("#.*", logos::skip)]
     #[regex("//.*", logos::skip)]
     Comment,
 
