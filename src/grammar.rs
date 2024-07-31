@@ -56,7 +56,7 @@ impl<'src> Grammar<'src> {
                         set.extend(first);
 
                         // I believe this is redundant
-                        last_may_be_empty = contains_empty || expr.may_miss();
+                        last_may_be_empty = contains_empty;
                         contains_empty
                     } else {
                         true
@@ -131,6 +131,7 @@ impl<'src> Grammar<'src> {
                         Expr::Optional(expr) | Expr::Repeat(expr) => {
                             set.extend(self.first_set_impl(expr, productions));
                         }
+                        Expr::Rule(rule) if productions.contains(rule) => {}
                         _ => {
                             set.extend(self.first_set_impl(curr, productions));
                             break;
@@ -252,12 +253,23 @@ pub enum Expr<'src> {
 impl<'src> Expr<'src> {
     fn may_miss(&self) -> bool {
         match self {
-            Expr::Optional(_) => true,
-            Expr::Repeat(_) => true,
             Expr::Literal(_) => false,
             Expr::Rule(_) => false,
-            Expr::Sequence(_) => false,
-            Expr::Choice(_) => false,
+            Expr::Sequence(exprs) => exprs.iter().all(|x| x.may_miss()),
+            Expr::Choice(branches) => branches.iter().all(|x| x.may_miss()),
+            Expr::Optional(_) => true,
+            Expr::Repeat(_) => true,
+        }
+    }
+
+    fn produces(&self, expr: &Expr) -> bool {
+        match self {
+            x @ Expr::Literal(_) => expr == x,
+            x @ Expr::Rule(_) => expr == x,
+            Expr::Sequence(exprs) => exprs.iter().any(|x| x.produces(expr)),
+            Expr::Choice(branches) => branches.iter().any(|x| x.produces(expr)),
+            Expr::Optional(x) => x.produces(expr),
+            Expr::Repeat(x) => x.produces(expr),
         }
     }
 
